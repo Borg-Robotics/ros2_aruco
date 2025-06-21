@@ -149,6 +149,56 @@ class ArucoNode(rclpy.node.Node):
         self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dictionary)
         self.bridge = CvBridge()
 
+    def convert_pose_from_opencv_to_ros(self, pose_msg):
+        """
+        Convert pose from OpenCV coordinate convention to ROS coordinate convention.
+        
+        OpenCV camera frame: +X right, +Y down, +Z forward
+        ROS camera frame: +X forward, +Y left, +Z up
+        
+        The transformation is: 
+        - X_ros = Z_opencv
+        - Y_ros = -X_opencv  
+        - Z_ros = -Y_opencv
+        """
+        # Extract position and orientation from input pose
+        pos_cv = np.array([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z])
+        quat_cv = np.array([pose_msg.orientation.x, pose_msg.orientation.y, 
+                        pose_msg.orientation.z, pose_msg.orientation.w])
+        
+        # Convert position from OpenCV to ROS convention
+        pos_ros = np.array([pos_cv[2], -pos_cv[0], -pos_cv[1]])  # [Z, -X, -Y]
+        
+        # Convert orientation from OpenCV to ROS convention
+        # Create rotation matrix from OpenCV quaternion
+        rot_cv = tf_transformations.quaternion_matrix(quat_cv)[:3, :3]
+        
+        # Transform the rotation matrix from OpenCV to ROS coordinate system
+        # This transformation matrix converts from OpenCV to ROS coordinates
+        T_cv_to_ros = np.array([[0, -1, 0],
+                            [0, 0, -1], 
+                            [1, 0, 0]])
+        
+        # Apply coordinate transformation to rotation matrix
+        rot_ros = T_cv_to_ros @ rot_cv @ T_cv_to_ros.T
+        
+        # Convert back to quaternion
+        rot_matrix_4x4 = np.eye(4)
+        rot_matrix_4x4[:3, :3] = rot_ros
+        quat_ros = tf_transformations.quaternion_from_matrix(rot_matrix_4x4)
+        
+        # Create output pose
+        pose_ros = Pose()
+        pose_ros.position.x = pos_ros[0]
+        pose_ros.position.y = pos_ros[1] 
+        pose_ros.position.z = pos_ros[2]
+        pose_ros.orientation.x = quat_ros[0]
+        pose_ros.orientation.y = quat_ros[1]
+        pose_ros.orientation.z = quat_ros[2]
+        pose_ros.orientation.w = quat_ros[3]
+        
+        return pose_ros
+    
     def info_callback(self, info_msg):
         self.info_msg = info_msg
         self.intrinsic_mat = np.reshape(np.array(self.info_msg.k), (3, 3))
@@ -176,14 +226,9 @@ class ArucoNode(rclpy.node.Node):
 
         corners, marker_ids, rejected = self.aruco_detector.detectMarkers(cv_image)
         if marker_ids is not None:
-            if cv2.__version__ > "4.0.0":
-                rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-                    corners, self.marker_size, self.intrinsic_mat, self.distortion
-                )
-            else:
-                rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(
-                    corners, self.marker_size, self.intrinsic_mat, self.distortion
-                )
+            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+                    corners, self.marker_size, self.intrinsic_mat, self.distortion)
+                
             for i, marker_id in enumerate(marker_ids):
                 pose = Pose()
                 pose.position.x = tvecs[i][0][0]
@@ -198,7 +243,9 @@ class ArucoNode(rclpy.node.Node):
                 pose.orientation.y = quat[1]
                 pose.orientation.z = quat[2]
                 pose.orientation.w = quat[3]
-
+                # Convert pose from OpenCV to ROS frame
+                pose = self.convert_pose_from_opencv_to_ros(pose)
+                # Append the pose and marker id to the messages
                 pose_array.poses.append(pose)
                 markers.poses.append(pose)
                 markers.marker_ids.append(marker_id[0])
