@@ -156,10 +156,12 @@ class ArucoNode(rclpy.node.Node):
         OpenCV camera frame: +X right, +Y down, +Z forward
         ROS camera frame: +X forward, +Y left, +Z up
         
-        The transformation is: 
-        - X_ros = Z_opencv
-        - Y_ros = -X_opencv  
-        - Z_ros = -Y_opencv
+        Position transformation: 
+        - X_ros = Z_opencv (forward)
+        - Y_ros = -X_opencv (left)
+        - Z_ros = -Y_opencv (up)
+        
+        Orientation needs different transformation to align axes properly.
         """
         # Extract position and orientation from input pose
         pos_cv = np.array([pose_msg.position.x, pose_msg.position.y, pose_msg.position.z])
@@ -175,9 +177,10 @@ class ArucoNode(rclpy.node.Node):
         
         # Transform the rotation matrix from OpenCV to ROS coordinate system
         # This transformation matrix converts from OpenCV to ROS coordinates
-        T_cv_to_ros = np.array([[0, -1, 0],
-                            [0, 0, -1], 
-                            [1, 0, 0]])
+        # Swap Z and Y axes, and flip Y direction
+        T_cv_to_ros = np.array([[0, 0, 1],
+                                [0, -1, 0], 
+                                [-1, 0, 0]])
         
         # Apply coordinate transformation to rotation matrix
         rot_ros = T_cv_to_ros @ rot_cv @ T_cv_to_ros.T
