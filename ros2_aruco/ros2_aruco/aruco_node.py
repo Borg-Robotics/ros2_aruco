@@ -48,7 +48,7 @@ class ArucoNode(rclpy.node.Node):
         # Declare and read parameters
         self.declare_parameter(
             name="marker_size",
-            value=0.0625,
+            value=0.1905, #meters (from the printed marker page) 
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
                 description="Size of the markers in meters.",
