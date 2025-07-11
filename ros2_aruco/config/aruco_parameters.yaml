@@ -3,6 +3,8 @@
     ## TODO: have a parameter indicating using sim or real markers that will change the default parameters
     marker_size: 0.2 # 0.1905 # meters (7.5 inches) on 8.5 x 11 inch paper
     aruco_dictionary_id: DICT_6X6_250 # DICT_6X6_250
-    image_topic: /depth_camera_1/image_raw
-    camera_info_topic: /depth_camera_1/camera_info
-    camera_frame: camera_1
+    # image_topic: /depth_camera_1/image_raw
+    image_topic: /oak/rgb/image_raw
+    # camera_info_topic: /depth_camera_1/camera_info
+    camera_info_topic: /oak/rgb/camera_info
+    # camera_frame: camera_1

@@ -1,171 +1,119 @@
-To test this repo with the gazbeo world (box_and_rack_world.world) prepared for the demo, 
-present at ... robot_gazebo/worlds/ ... launch the following things in separate terminals 
+## Testing in real world
+1. **Start the real camera.**  
+    The front-facing camera mounted on the robot has the ID `14442C10E171DDD600`.
 
-```
-ros2 launch robot_gazebo borg_w1_moveit.launch.py
-```
+    ```
+    ros2 launch depthai_ros_driver camera.launch.py
+    ```
+    Confirm that you see a message like  
+    `[component_container-1] [INFO] [...] [oak]: Camera with MXID: 14442C10E171DDD600 and Name: 1.1.2 connected!`  
+    in the terminal after launching the command.
 
-![Alt text](documentation/world.png)
+    > **Note:** The USB hub port order matters. By default, `camera.launch.py` streams from the camera plugged into the first detected port. If both cameras are connected, ensure the front-facing camera (ID `14442C10E171DDD600`) is plugged into the correct port, or the launch file may select the other camera.
 
-```
-ros2 run tf2_ros static_transform_publisher 0 0 0 -1.5708 0 -1.5708 camera_1 camera_optical_frame
-```
-```
-ros2 launch ros2_aruco aruco_recognition.launch.py
-```
-To view the results
-```
-ros2 topic echo /aruco_markers
-```
+2. **Identify the RGB image and camera info topics.**  
+    Run the following command in a separate terminal:
 
----
+    ```
+    ros2 topic list | grep oak
+    ```
+    Look for the RGB image topic (e.g., `/oak/rgb/image_raw`) and camera info topic (`/oak/rgb/camera_info`).  
+    Update these topic names in `ros2_aruco/ros2_aruco/config/aruco_parameters.yaml`.  
+    Also, comment out the `camera_frame` parameter in the same YAML file—the aruco node will use the default frame name from `/oak/rgb/camera_info`.
 
+3. **Launch the robot model in RViz.**
 
-## The static transform publisher is needed because, 
-in the pose that the aruco marker package publishes wrt camera,  the position value in x axis seems to be fillped with z...
+    ```
+    ros2 launch borg_w1_description display.launch.py
+    ```
 
+4. **Publish a static transform.**  
+    This step is temporary and will be scripted later.
 
-### ChatGPT says... 
+    ```
+    ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 camera_1 oak_rgb_camera_optical_frame
+    ```
 
-Yes — this is **expected** behavior and is due to differences in **coordinate frame conventions** between the camera (often using **OpenCV** conventions) and ROS (which uses **REP-103** coordinate conventions).
+5. **Start the ArUco detection node.**
 
----
+    ```
+    ros2 launch ros2_aruco aruco_recognition.launch.py
+    ```
 
-### 📷 OpenCV (used internally by ArUco and many vision libraries)
+6. **View detection results.**  
+    You can check results via ROS topics or in RViz:
 
-In OpenCV / computer vision:
+    ```
+    ros2 topic echo /aruco_markers
 
-* **X** → right
-* **Y** → down
-* **Z** → forward (into the image)
+    OR 
 
----
+    ros2 topic echo /aruco_poses
+    ```
 
-### 🤖 ROS (REP-103 standard for TF and poses)
-
-In ROS:
-
-* **X** → forward
-* **Y** → left
-* **Z** → up
-
----
-
-### 🧭 What this means for ArUco marker poses
-
-If the ArUco detection library (like `aruco_ros` or `depthai-ros`) is giving the pose of the marker **relative to the camera**, and if it's using the **OpenCV convention**, then the pose axes will appear "flipped" when viewed in RViz or used in TF.
-
-Specifically, you'll often see:
-
-| ArUco Axis (OpenCV) | Appears as in ROS |
-| ------------------- | ----------------- |
-| X (right)           | Y (left/right)    |
-| Y (down)            | Z (up/down)       |
-| Z (forward)         | X (forward/back)  |
-
-This results in the **X and Z axes appearing swapped or inverted** depending on the marker orientation and the way the pose is converted or broadcasted.
-
----
-
-### ✅ Fix / Align Axes
-
-To fix this mismatch and publish a marker pose correctly in ROS TF:
-
-1. You can **manually transform the pose** to match REP-103 using a static transform or code.
-2. Or use `tf2_geometry_msgs` to convert the pose and republish it with corrected axes.
-3. Some ArUco ROS packages let you set the output frame convention (check the docs for options like `output_frame` or `use_camera_frame`).
-
----
-
-### 🧪 Quick Debug Tip
-
-Visualize the pose in RViz with an `Axes` marker and check:
-
-* Does the **red arrow (X)** point forward (as expected in ROS)?
-* If not, the pose frame needs to be remapped to match REP-103.
-
----
+![ArUco Detection Example](documentation/aruco_detection_real.png)
 
 
-### My question???
+## Testing in SIM
 
-The red arrow that I visualize in rviz, is at the wrong position (z position seems to be flipped with x position), and is pointing in the positive x axis of the camera...see that attached picture below...the frame shown in the picture is the camera frame, and the aruco marker in gazebo is right in front fo the x axis of the camera frame
+To test this repository with the prepared Gazebo world (`box_and_rack_world.world`) located in `robot_gazebo/worlds/`, launch the following commands in separate terminals:
 
-![Alt text](documentation/wrong_aruco_location.png)
+1. **Launch the robot and MoveIt in Gazebo.**  
+    This command starts the robot simulation in Gazebo along with MoveIt for motion planning.
 
-### ChatGPT says...
+    ```
+    ros2 launch robot_gazebo borg_w1_moveit.launch.py
+    ```
 
-Thanks for the image — this helps clarify the issue. Based on your description and what I see in the RViz visualization:
+2. **Visualize the Gazebo world.**  
+    The image below shows the simulated environment where the robot operates.
 
-* ✅ The **red arrow** (X-axis of the ArUco marker pose) is **pointing correctly in the camera's X direction** — that's typical for OpenCV-based pose estimation.
-* ❌ But the **position of the red arrow is not in front of the camera**; it's up above, indicating that the **Z and X position values may be flipped**.
+    ![Gazebo World](documentation/world.png)
+
+3. **Publish a static transform between camera frames.**  
+    This command sets up a fixed transform between the camera's base frame and its optical frame, ensuring correct pose alignment.
+
+    ```
+    ros2 run tf2_ros static_transform_publisher 0 0 0 -1.5708 0 -1.5708 camera_1 camera_optical_frame
+    ```
+
+4. **Start the ArUco detection node.**  
+    This launches the node that detects ArUco markers in the simulated camera feed.
+
+    ```
+    ros2 launch ros2_aruco aruco_recognition.launch.py
+    ```
+
+5. **View detection results.**  
+    Use this command to display detected ArUco markers from the simulation.
+
+    ```
+    ros2 topic echo /aruco_markers
+    
+    OR 
+
+    ros2 topic echo /aruco_poses
+    ```
+    ```
+
 
 ---
 
-### ✅ What’s Happening
+## Why is the static transform publisher needed?
 
-It looks like you’re visualizing the ArUco marker's pose **relative to the camera frame**. Most ArUco libraries (including OpenCV and many ROS wrappers) output the marker’s pose in the **camera’s optical frame**, which uses the OpenCV convention:
+The pose published by the ArUco marker package with respect to the camera has the X and Z axes swapped. This occurs due to differences in coordinate frame conventions between computer vision libraries and ROS.
 
-| Axis | OpenCV Camera Frame | ROS (REP-103) Camera Frame |
-| ---- | ------------------- | -------------------------- |
-| X    | right               | forward                    |
-| Y    | down                | left                       |
-| Z    | forward             | up                         |
+### Coordinate Frame Conventions
 
-That means a pose reported as `(x=0.5, y=0, z=0)` in OpenCV means:
+**OpenCV (used by ArUco and many vision libraries):**
+- X → right
+- Y → down
+- Z → forward (into the image)
 
-* 50 cm **in front** of the camera,
-* but in ROS, that gets interpreted as **50 cm to the right**.
+**ROS (REP-103 standard):**
+- X → forward
+- Y → left
+- Z → up
 
-This is likely why your marker appears **above** and **misplaced** in RViz.
-
----
-
-### 🛠️ Fix: Convert Pose from Optical Frame to REP-103
-
-You need to **transform the pose** to match ROS coordinate frames. Here's how you can do it programmatically (Python):
-
-```python
-from geometry_msgs.msg import PoseStamped
-from tf2_geometry_msgs import do_transform_pose
-import tf2_ros
-import tf_transformations
-from geometry_msgs.msg import TransformStamped
-
-def convert_pose_from_opencv_to_ros(pose_msg):
-    # Create the fixed transform between OpenCV camera frame and ROS camera frame
-    t = TransformStamped()
-    t.transform.translation.x = 0
-    t.transform.translation.y = 0
-    t.transform.translation.z = 0
-    # 90 deg rotation around X then -90 around Z: OpenCV ➜ ROS
-    quat = tf_transformations.quaternion_from_euler(-1.5708, 0, -1.5708)
-    t.transform.rotation.x = quat[0]
-    t.transform.rotation.y = quat[1]
-    t.transform.rotation.z = quat[2]
-    t.transform.rotation.w = quat[3]
-    return do_transform_pose(pose_msg, t)
-```
-
-You can wrap this around your ArUco pose output before publishing to ROS.
-
----
-
-### 🧪 Quick Diagnostic
-
-If you're unsure whether your marker pose is being output in OpenCV-style or REP-103:
-
-* Visualize both `camera_link` and `aruco_pose` in RViz
-* If the marker pose appears **not directly in front of camera's X-axis**, but rather up/right, then it’s probably in OpenCV format.
-
----
-
-### ✅ Fix in RViz (Temporary)
-
-If you just want to **visualize** it correctly and aren’t using the pose elsewhere yet, you can:
-
-1. **Broadcast a static transform** between the optical frame (`camera_optical_frame`) and a REP-103 camera frame (`camera_link`).
-2. Change your marker publisher to use the corrected frame.
-
----
+This difference means a static transform is required to correctly align the frames for accurate pose estimation.
 
